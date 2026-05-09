@@ -9,51 +9,46 @@ from carabiner.cliutils import CLIApp, CLICommand, CLIOption, clicommand
 from carabiner.pd import read_table
 
 from .fasta import FastaCollection
-from .gff import GffFile
+from .gff.gff import GffFile
 
-__version__ = '0.0.2.post1'
+from . import appname, __version__
+
 
 def _allow_broken_pipe(f: Callable) -> Callable:
-
     def _f(*args, **kwargs):
-
         try:
-
             return f(*args, **kwargs)
-        
         except BrokenPipeError:
-
             pass
-
     return _f
 
 
 @clicommand(message='Converting GFF to table with the following parameters')
 def _gff2table(args: Namespace) -> None:
 
-    separator = dict(tsv='\t', csv=',')
-
     gff_file = GffFile.from_file(args.input)
-
-    _allow_broken_pipe(gff_file.to_csv)(args.output,
-                                        write_metadata=args.metadata,
-                                        sep=separator[args.format.casefold()])
+    _allow_broken_pipe(gff_file.to_csv)(
+        args.output,
+        write_metadata=args.metadata,
+        sep={"tsv": "\t", "csv": ","}[args.format.casefold()],
+    )
     return None
 
 
 @clicommand(message='Generating FASTA from tables with the following parameters')
 def _table2fasta(args: Namespace) -> None:
-
-    table = read_table(args.input, 
-                       format=args.format)
+    table = read_table(
+        args.input, 
+        format=args.format,
+    )
     
-    fasta_collection = FastaCollection.from_pandas(table, 
-                                                   sequence=args.sequence,
-                                                   names=args.name, 
-                                                   descriptions=args.description)
-    
+    fasta_collection = FastaCollection.from_pandas(
+        table, 
+        sequence=args.sequence,
+        names=args.name, 
+        descriptions=args.description,
+    )
     _allow_broken_pipe(fasta_collection.write)(file=args.output)
-    
     return None
 
 
@@ -108,10 +103,12 @@ def main() -> None:
                              main=_table2fasta,
                              options=[inputs, format, sequence, name, description, worksheet, outputs])
 
-    app = CLIApp("bioino",
-                 version=__version__,
-                 description="Interconvert some bioinformatics file formats.",
-                 commands=[gff2table, table2fasta])
+    app = CLIApp(
+        appname,
+        version=__version__,
+        description="Interconvert some bioinformatics file formats.",
+        commands=[gff2table, table2fasta],
+    )
     
     app.run()
 
