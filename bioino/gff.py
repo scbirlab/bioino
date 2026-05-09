@@ -17,25 +17,32 @@ from carabiner import print_err
 from carabiner.cast import cast
 from tqdm.auto import tqdm
 
-_GFF_COLNAMES = ('seqid', 'source', 'feature', 
-                'start', 'end', 'score', 
-                'strand', 'phase', 'attribute')
-_GFF_FEATURE_BLOCKLIST = ('region', 'repeat_region')
+_GFF_COLNAMES = (
+    "seqid", 
+    "source", 
+    "feature", 
+    "start", 
+    "end", 
+    "score", 
+    "strand", 
+    "phase", 
+    "attribute",
+)
+_GFF_FEATURE_BLOCKLIST = (
+    "region", 
+    "repeat_region",
+)
 
 
 def _cast_to_file_handle(file: Union[str, TextIOWrapper]) -> TextIOWrapper:
-
     if isinstance(file, TextIOWrapper):
-
         return file
-    
     else:
-
         return cast(file, to=TextIOWrapper)
+
 
 @dataclass
 class GffMetadatum:
-
     """GFF-formatted metadata line.
 
     Attributes
@@ -43,7 +50,7 @@ class GffMetadatum:
     name : str
         Name of metadatum.
     flag : str, optional
-        'constrained' or 'free', depending on whether it conforms to GFF. Default: 'free'.
+        "constrained" or "free", depending on whether it conforms to GFF. Default: "free".
     values : tuple, optional
         Tuple of values corresponding to `name`. Default: zero-length tuple.
         
@@ -57,48 +64,36 @@ class GffMetadatum:
 
     Examples
     --------
-    >>> print(GffMetadatum('Meta_name', 'free', ('meta_value1', 'meta_value2')))  # doctest: +NORMALIZE_WHITESPACE
+    >>> print(GffMetadatum("Meta_name", "free", ("meta_value1", "meta_value2")))  # doctest: +NORMALIZE_WHITESPACE
     #Meta_name  meta_value1     meta_value2
-    >>> print(GffMetadatum('Meta_name', 'constrained', ('meta_value1', 'meta_value2')))  # doctest: +NORMALIZE_WHITESPACE
+    >>> print(GffMetadatum("Meta_name", "constrained", ("meta_value1", "meta_value2")))  # doctest: +NORMALIZE_WHITESPACE
     ##Meta_name meta_value1     meta_value2
 
     """
-
     name: str
-    flag: str = field(default='constrained')
+    flag: str = field(default="constrained")
     values: Tuple = field(default_factory=tuple)
 
     def __post_init__(self):
-
-        if self.flag not in ['free', 'constrained']:
-
+        if self.flag not in ["free", "constrained"]:
             raise ValueError("GffMetadatum.flag must be one of ['free', 'constrained']].")
         
-
     def __str__(self) -> str:
-
         """Show the GFF-formatted metadata."""
-
-        prefix = ('##' if self.flag == 'constrained' 
-                  else '#')
-        suffix = '\t'.join(map(str, self.values))
-
+        prefix = "##" if self.flag == "constrained" else "#"
+        suffix = "\t".join(map(str, self.values))
         return f"{prefix}{self.name}\t{suffix}"
     
-
-    def write(self, 
-              file: TextIOWrapper = sys.stdout) -> None:
-
+    def write(
+        self, 
+        file: TextIOWrapper = sys.stdout
+    ) -> None:
         """Write GFF-formatted line to file."""
-
-        print(str(self), file=file)
-
-        return None
+        return print(str(self), file=file)
         
 
 @dataclass
 class GffMetadata:
-
     """GFF-formatted metadata.
 
     Attributes
@@ -123,50 +118,34 @@ class GffMetadata:
     #meta2 item2    comment
 
     """
-
     data: Iterable[Union[GffMetadatum, Iterable]]
 
     def __post_init__(self):
-
         new_metadata = []
-
         for item in self.data:
-
             if isinstance(item, GffMetadatum):
-
                 new_metadatum = item
-
             elif isinstance(item, Iterable) and not isinstance(item, str):
-
                 new_metadatum = GffMetadatum(*item)
-
             else:
-
                 raise ValueError(f"{item} of type {type(item)} cannot be converted to GffMetadatum.")
-
             new_metadata.append(new_metadatum)
-
         self.data = tuple(new_metadata)
-
     
     def __str__(self) -> str:
-
         """Show the GFF-formatted metadata."""
+        return "\n".join(map(str, self.data))
 
-        return '\n'.join(map(str, self.data))
-    
-
-    def write(self, 
-              file: Optional[TextIOWrapper] = None) -> None:
-        
+    def write(
+        self, 
+        file: Optional[TextIOWrapper] = None
+    ) -> None:
         """Write GFF-formatted line to file."""
-
         return print(str(self), file=file)
 
 
 @dataclass
 class GffColumns:
-
     """GFF-formatted columns.
 
     Attributes
@@ -182,11 +161,11 @@ class GffColumns:
     end : int
         End coordinate.
     score : str, optional
-        Score for feature. Default: '.'.
+        Score for feature. Default: ".".
     strand : str, optional
-        Strandedness of feature. Either '+' or '-'. Default: '+'.
+        Strandedness of feature. Either "+" or "-". Default: "+".
     phase : str or int, optional
-        Location of first codon in feature relative to start. Default: '.'.
+        Location of first codon in feature relative to start. Default: ".".
         
     Methods
     -------
@@ -200,37 +179,29 @@ class GffColumns:
     NC_000913.3 GenBank exon    1       100     .       +       .
 
     """
-
     seqid: str
     source: str
     feature: str
     start: Union[str, int]
     end: Union[str, int]
-    score: Optional[Union[str, int]] = field(default='.')
-    strand: Optional[str] = field(default='+')
-    phase: Optional[Union[str, int]] = field(default='.')
+    score: Optional[Union[str, int]] = field(default=".")
+    strand: Optional[str] = field(default="+")
+    phase: Optional[Union[str, int]] = field(default=".")
 
     def __post_init__(self):
-
         self.start = int(self.start)
         self.end = int(self.end)
 
-    
     def __str__(self) -> str:
-
         """Show the GFF-formatted columns."""
-
-        return '\t'.join(map(str, self.as_dict().values()))
+        return "\t".join(map(str, self.as_dict().values()))
     
-
     def as_dict(self) -> dict:
-        
         return asdict(self)
 
 
 @dataclass
 class GffLine:
-
     """Named tuple which gives a GFF-formatted line when printed.
 
     Attributes
@@ -266,64 +237,45 @@ class GffLine:
 
     @staticmethod
     def _get_gff_attributes(x: str) -> Dict[str, str]:
-
-        splits_on_equal_sign = [item.split(';') for item in x.split('=')]
-        
+        splits_on_equal_sign = [item.split(";") for item in x.split("=")]
         attributes = (item[-1] for item in splits_on_equal_sign)
         values = (item[0] for item in splits_on_equal_sign[1:])
-        
         return dict(zip(attributes, values))
     
-
     def __post_init__(self):
-
         if isinstance(self.columns, Iterable):
-
             self.columns = GffColumns(*self.columns)
-
         if isinstance(self.attributes, str):
-
             self.attributes = self._get_gff_attributes(self.attributes)
-
     
     def __str__(self) -> str:
-
         """Show the GFF-formatted line."""
-
-        _attributes = ';'.join(f'{key}={val}' for key, val in self.attributes.items())
-
-        return str(self.columns) + '\t' + _attributes
+        _attributes = ";".join(f"{key}={val}" for key, val in self.attributes.items())
+        return str(self.columns) + "\t" + _attributes
     
-
     def as_dict(self) -> dict:
-
         """Convert to dictionary."""
-
         d = self.columns.as_dict()
         d.update(self.attributes)
-        
         return d
 
-
     def copy(self):
-
         """Make a copy."""
-
         return replace(self)
     
-
-    def write(self, 
-              file: Optional[TextIOWrapper] = None) -> None:
-
+    def write(
+        self,
+        file: Optional[TextIOWrapper] = None
+    ) -> None:
         """Write GFF-formatted line to file."""
-
         return print(str(self), file=file)
     
 
     @classmethod
-    def from_dict(cls,
-                  d: Mapping):
-    
+    def from_dict(
+        cls,
+        d: Mapping
+    ):
         """Converts a dictionary object to a GFFLine.
 
         The input dictionary must at least have keys corresponding to the GFF
@@ -342,31 +294,31 @@ class GffLine:
 
         Examples
         --------
-        >>> d = dict(seqid='TEST', source='test', 
-        ...          feature='gene', start=1, 
-        ...          end=100, score='.', 
-        ...          strand='+', phase='+')
+        >>> d = dict(seqid="TEST", source="test", 
+        ...          feature="gene", start=1, 
+        ...          end=100, score=".", 
+        ...          strand="+", phase="+")
         >>> print(GffLine.from_dict(d)) # doctest: +NORMALIZE_WHITESPACE
         TEST        test    gene    1       100     .       +       +
-        >>> d.update(dict(ID='test001', comment='This is a test'))
+        >>> d.update(dict(ID="test001", comment="This is a test"))
         >>> GffLine.from_dict(d).write() # doctest: +NORMALIZE_WHITESPACE
         TEST    test    gene    1       100     .       +       +       ID=test001;comment=This is a test
 
         """
-
         _fields = _GFF_COLNAMES #[f.name for f in fields(cls)]
-
-        columns = GffColumns(**{key: value for key, value in d.items() 
-                                if key in _fields})
-        attributes = {key: d[key] for key in sorted(d) 
-                      if key not in _fields}
-
-        return GffLine(columns, attributes)
+        columns = GffColumns(**{
+            key: value for key, value in d.items() 
+            if key in _fields
+        })
+        attributes = {
+            key: d[key] for key in sorted(d) 
+            if key not in _fields
+        }
+        return cls(columns, attributes)
     
 
 @dataclass
 class GffFile:
-
     r"""Object for reading, writing, and manipulating GFF files.
 
     Attributes
@@ -394,8 +346,8 @@ class GffFile:
     >>> from io import StringIO
     >>> lines = ["##meta1 item1", 
     ...          "#meta2  item2  comment", 
-    ...          '\t'.join("test_seq    test_source gene    1   10  .   +   .   ID=test01;attr1=+".split()),
-    ...          '\t'.join("test_seq    test_source gene    9   100  .   +   .   Parent=test01;attr2=+".split())]
+    ...          "\t".join("test_seq    test_source gene    1   10  .   +   .   ID=test01;attr1=+".split()),
+    ...          "\t".join("test_seq    test_source gene    9   100  .   +   .   Parent=test01;attr2=+".split())]
     >>> file = StringIO()
     >>> for line in lines:
     ...     print(line, file=file)
@@ -407,33 +359,27 @@ class GffFile:
     test_seq   test_source     gene    9       100     .       +       .       Parent=test01;attr2=+
     
     """
-
     lines: Iterable[GffLine]
     metadata: Optional[Union[GffMetadata, Iterable[Union[Iterable, GffMetadatum]]]] = field(default_factory=list)
     lookup: Optional[bool] = field(default=False)
     _lookup: Dict[int, Tuple[GffLine]] = field(init=False, default_factory=dict)
 
     def __post_init__(self):
-
         if isinstance(self.metadata, Iterable):
-
             self.metadata = GffMetadata(self.metadata)
-
         if self.lookup:
             self.lines = tuple(self.lines)
             self._lookup = self._lookup_table()
 
 
     @staticmethod
-    def _gapfill_table(gff_line: GffLine, 
-                       last_feature: Optional[GffLine] = None) -> Dict[int, GffLine]:
-
+    def _gapfill_table(
+        gff_line: GffLine, 
+        last_feature: Optional[GffLine] = None
+    ) -> Dict[int, GffLine]:
         lookup_table = defaultdict(list)
-
         this_start = gff_line.columns.start
-
         if last_feature is None:
-
             last_end = 0
             intergenic0 = gff_line.copy()
         
@@ -447,28 +393,28 @@ class GffFile:
         gap_span = (this_start - 1) - (last_end + 1)
         gap_midpoint = last_end + 1 + gap_span // 2
         
-        if intergenic0.columns.strand == '+':
+        if intergenic0.columns.strand == "+":
             pre_mid_offset_start = intergenic0.columns.start
             pre_mid_sign = 1.
-            pre_mid_prefix = '_down-' if last_feature is not None else '_up-' 
+            pre_mid_prefix = "_down-" if last_feature is not None else "_up-" 
         else:
             pre_mid_offset_start = intergenic0.columns.end
             pre_mid_sign = -1.
-            pre_mid_prefix = '_up-' if last_feature is not None else '_down-' 
+            pre_mid_prefix = "_up-" if last_feature is not None else "_down-" 
 
-        if intergenic1.columns.strand == '+':
+        if intergenic1.columns.strand == "+":
             post_mid_offset_start = intergenic1.columns.start
             post_mid_sign = -1.
-            post_mid_prefix = '_up-'
+            post_mid_prefix = "_up-"
         else:
             post_mid_offset_start = intergenic1.columns.end
             post_mid_sign = 1.
-            post_mid_prefix = '_down-'
+            post_mid_prefix = "_down-"
 
         attr0 = intergenic0.attributes.copy() 
-        attr0.update(dict(locus_tag=pre_mid_prefix + attr0['Name']))
+        attr0.update(dict(locus_tag=pre_mid_prefix + attr0["Name"]))
         attr1 = intergenic1.attributes.copy() 
-        attr1.update(dict(locus_tag=post_mid_prefix + attr1['Name']))
+        attr1.update(dict(locus_tag=post_mid_prefix + attr1["Name"]))
         # print(attr1)
 
         # fill in the gap
@@ -516,7 +462,7 @@ class GffFile:
         dict
             Dictionary mapping chromosome location to feature annotation.
 
-        """.format(', '.join(_GFF_FEATURE_BLOCKLIST))
+        """.format(", ".join(_GFF_FEATURE_BLOCKLIST))
 
         print_err("Building annotation lookup table.")
 
@@ -527,8 +473,8 @@ class GffFile:
         for gff_line in tqdm(self.lines):
 
             if (gff_line.columns.feature not in _GFF_FEATURE_BLOCKLIST and 
-                'Name' in gff_line.attributes and
-                'Parent' not in gff_line.attributes):
+                "Name" in gff_line.attributes and
+                "Parent" not in gff_line.attributes):
                     
                 gap_table = self._gapfill_table(gff_line, 
                                                 last_feature)
@@ -536,7 +482,7 @@ class GffFile:
                 lookup_table.update(gap_table)
 
                 offset_start = (gff_line.columns.start 
-                                if gff_line.columns.strand == '+' 
+                                if gff_line.columns.strand == "+" 
                                 else gff_line.columns.end)
 
                 for i in range(gff_line.columns.start, 
@@ -544,16 +490,16 @@ class GffFile:
 
                     offset =  abs(i - offset_start)
                     this_gff_line = gff_line.copy()
-                    this_gff_line.attributes['offset'] = offset
+                    this_gff_line.attributes["offset"] = offset
 
                     lookup_table[i].append(this_gff_line)
 
                 last_feature = gff_line.copy()
 
-        if last_feature.columns.strand == '+':
+        if last_feature.columns.strand == "+":
             last_offset_start = last_feature.columns.start
             last_sign = 1.
-            last_prefix = '_down-'
+            last_prefix = "_down-"
         else:
             last_offset_start = last_feature.columns.end
             last_sign = -1.
@@ -582,7 +528,6 @@ class GffFile:
 
 
     def as_dict(self) -> Iterable[dict]:
-
         r"""Converts a `GffFile` to a stream of dictionaries.
 
         The resulting dicitonary from a `GffLine` has keys for the GFF columns 
@@ -605,14 +550,15 @@ class GffFile:
         [{'seqid': 'TEST', 'source': 'test', 'feature': 'gene', 'start': 1, 'end': 100, 'score': '.', 'strand': '+', 'phase': '+', 'ID': 'test001', 'comment': 'Test'}, {'seqid': 'TEST2', 'source': 'test2', 'feature': 'gene', 'start': 101, 'end': 200, 'score': '.', 'strand': '+', 'phase': '+', 'ID': 'test002', 'comment': 'Test2'}]
         
         """
-
         return (line.as_dict() for line in self.lines)
 
         
-    def to_csv(self,
-               file: TextIOWrapper = sys.stdout,
-               write_metadata: bool = False,
-               sep=',') -> None:
+    def to_csv(
+        self,
+        file: TextIOWrapper = sys.stdout,
+        write_metadata: bool = False,
+        sep="","
+    ) -> None:
         
         r"""Writes a `GffFile` to a delimited file.
 
@@ -677,86 +623,68 @@ class GffFile:
 
         print_err('Processing GFF attributes...')
         for i, gff_line in enumerate(tqdm(self.lines)):
-
             if i == 0:
-                
                 main_cols = [f.name for f in fields(gff_line.columns)]
-            
             attribute_keys |= set(gff_line.attributes)
 
         if main_cols is None:
-
             raise IOError('GFF stream is empty.')
 
         if write_metadata:
-            
             self.metadata.write(file=file)
 
         csv_fieldnames = list(chain(main_cols, sorted(attribute_keys)))
-        writer = csv.DictWriter(file,
-                                fieldnames=csv_fieldnames,
-                                delimiter=sep)
+        writer = csv.DictWriter(
+            file,
+            fieldnames=csv_fieldnames,
+            delimiter=sep,
+        )
         writer.writeheader()
-        
         for gff_line in self.as_dict():
-
             writer.writerow(gff_line)
-
         return None
 
 
     @staticmethod
-    def _from_file(file: Union[str, TextIOWrapper]) -> Iterable[Union[GffMetadata, GffLine]]:
-
+    def _from_file(
+        file: Union[str, TextIOWrapper]
+    ) -> Iterable[Union[GffMetadata, GffLine]]:
         metadata = []
         metadata_shown = False
-        
         with _cast_to_file_handle(file) as file:
-
             for line in file:
-
                 line = line.strip()
-
                 if line.startswith('#'):  # header
-
                     flag = 'constrained' if line.startswith('##') else 'free'
                     this_metadata = line.lstrip('#').lstrip().split('\t')
-                    
-                    metadata.append(GffMetadatum(name=this_metadata[0], 
-                                                 flag=flag, 
-                                                 values=this_metadata[1:]))
-
+                    metadata.append(
+                        GffMetadatum(
+                            name=this_metadata[0], 
+                            flag=flag, 
+                            values=this_metadata[1:],
+                        )
+                    )
                 elif len(line) > 0:  ## tab-delimited table
-                    
                     if not metadata_shown:
                         yield GffMetadata(metadata)
-
                     metadata_shown = True
-
                     data = line.split('\t')  ## Must be TAB otherwise columns 1-8 get messed up
-                    
                     try:
-                        
                         columns = GffColumns(*data[:8])
-                    
                     except TypeError:
-
                         print(data[:8], file=sys.stdout)
-                        
-                        raise IOError('\n!!! ERROR: Probably corrupted file. '
-                                      'Here\'s the last line read:\n\n'
-                                      f'{line}\n\n')
-                    
+                        raise IOError(
+                            '\n!!! ERROR: Probably corrupted file. '
+                            'Here\'s the last line read:\n\n'
+                            f'{line}\n\n'
+                        )
                     attributes = '\t'.join(data[8:]) 
-
                     yield GffLine(columns, attributes)
-
 
     @classmethod
     def from_file(cls, 
                   file: Union[str, TextIOWrapper],
                   lookup: bool = False):
-
         """Stream records from a GFF file.
 
         Takes a file handle and instantiates a `GffFile` object.
@@ -778,25 +706,23 @@ class GffFile:
             If file is incorrectly formatted.
 
         """
-
         metadata = []
         file_parser = cls._from_file(file)
-
         for item in file_parser:
-
             if isinstance(item, GffMetadata):
-
                 metadata = item
                 break
 
-        return cls(lines=(line for line in file_parser), 
-                   metadata=metadata,
-                   lookup=lookup)
+        return cls(
+            lines=(line for line in file_parser), 
+            metadata=metadata,
+            lookup=lookup,
+        )
     
-
-    def write(self, 
-              file: Optional[TextIOWrapper] = None) -> None:
-        
+    def write(
+        self, 
+        file: Optional[TextIOWrapper] = None
+    ) -> None:
         """Stream GFF records to a GFF file.
         
         Parameters
@@ -805,13 +731,7 @@ class GffFile:
             File handle such as on generated by `open(f, mode='w')`.
 
         """
-
         self.metadata.write(file=file)
-
         for line in self.lines:
-
             line.write(file=file)
-
         return None
-
-

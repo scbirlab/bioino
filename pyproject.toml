@@ -1,6 +1,6 @@
 [project]
 name = "bioino"
-version = "0.0.2.post1"
+version = "0.0.3"
 authors = [
   { name="Eachan Johnson", email="eachan.johnson@crick.ac.uk" },
 ]
@@ -24,13 +24,20 @@ classifiers = [
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: 3 :: Only",
 ]
 
 dependencies = [ 
-  "carabiner-tools[pd]>=0.0.1.post2",
-  "pandas"
+  "carabiner-tools[pd]>=0.0.5.post3",
+  "pandas",
 ]
+
+[project.optional-dependencies]
+all = []
+dev = ["pytest>=7.4", "pytest-cov", "flake8", "gradio>=5"]
 
 [project.urls]
 "Homepage" = "https://github.com/scbirlab/bioino"
@@ -44,3 +51,6 @@ bioino = "bioino.cli:main"
 # https://pip.pypa.io/en/stable/reference/pip/#pep-517-and-518-support
 requires = ["setuptools>=43.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[test]
+deps = ["pytest>=7.4", "pytest-cov", "bartab[dev]"] 
