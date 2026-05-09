@@ -15,20 +15,17 @@ import sys
 from carabiner import print_err
 from tqdm.auto import tqdm
 
-from .column import GffColumns, GffMetadata, GffMetadatum 
+from . import DOWNSTREAM_PREFIX, NAME_ATTRIBUTE, UPSTREAM_PREFIX
+from .column import GffColumns
 from .gapfill import _gapfill_intervals
 from .intervals import ChromosomeLookup, FeatureInterval
-from .line import GffLine
+from .line import GffLine, GffMetadata, GffMetadatum
 from .utils import _cast_to_file_handle
 
 _GFF_FEATURE_BLOCKLIST: Tuple[str] = (
     "region", 
     "repeat_region",
 )
-
-DOWNSTREAM_PREFIX: str = "_down-"
-UPSTREAM_PREFIX: str = "_up-"
-NAME_ATTRIBUTE: str = "Name"
 
 
 @dataclass
@@ -184,7 +181,7 @@ class GffFile:
                 gff_line.columns.feature in _GFF_FEATURE_BLOCKLIST,
                 NAME_ATTRIBUTE not in gff_line.attributes,
                 "Parent" in gff_line.attributes,
-            ])
+            ]):
                 continue
 
             seqid = gff_line.columns.seqid
@@ -245,11 +242,65 @@ class GffFile:
         tuple of GffLine
             All features covering pos with offset and locus_tag computed.
             Empty tuple if pos falls outside all annotated intervals.
+
+        # GffFile.lookup_at — goes in gff.py
+
+        Examples
+        ========
+        >>> from io import StringIO
+        >>> from bioino.gff.gff import GffFile
+        >>> gff_text = '\\n'.join([
+        ...     '\\t'.join(['chr1', 'src', 'gene', '10', '50', '.', '+', '.', 'ID=g1;Name=geneA']),
+        ...     '\\t'.join(['chr1', 'src', 'gene', '100', '150', '.', '+', '.', 'ID=g2;Name=geneB']),
+        ...     '\\t'.join(['chr2', 'src', 'gene', '20', '80', '.', '-', '.', 'ID=g3;Name=geneC']),
+        ... ])
+        >>> gff = GffFile.from_file(StringIO(gff_text), lookup=True)  # doctest: +ELLIPSIS
+        ...
+
+        Gene body, + strand — offset from start:
+
+        >>> r = gff.lookup_at('chr1', 30)
+        >>> r[0].attributes['locus_tag'], r[0].attributes['offset']
+        ('geneA', 20)
+
+        Intergenic, first half — attributed to upstream gene:
+
+        >>> r = gff.lookup_at('chr1', 75)
+        >>> r[0].attributes['locus_tag'], r[0].attributes['offset']
+        ('_down-geneA', 65)
+
+        Intergenic, second half — attributed to downstream gene:
+
+        >>> r = gff.lookup_at('chr1', 76)
+        >>> r[0].attributes['locus_tag'], r[0].attributes['offset']
+        ('_up-geneB', 24)
+
+        Trailing region past last gene:
+
+        >>> r = gff.lookup_at('chr1', 200)
+        >>> r[0].attributes['locus_tag'], r[0].attributes['offset']
+        ('_down-geneB', 100)
+
+        chr2 is independent — gene body on - strand, offset from end:
+
+        >>> r = gff.lookup_at('chr2', 50)
+        >>> r[0].attributes['locus_tag'], r[0].attributes['offset']
+        ('geneC', 30)
+
+        Unknown seqid returns empty tuple:
+
+        >>> gff.lookup_at('chrX', 50)
+        ()
+
+        Position before any interval returns empty tuple:
+
+        >>> gff.lookup_at('chr1', 0)
+        ()
         
         """
         chrom = self._lookup.get(seqid)
         if chrom is None:
-            return None
+            return ()
         return chrom.at(pos)
 
     def as_dict(self) -> Iterable[dict]:
@@ -281,7 +332,7 @@ class GffFile:
         self,
         file: TextIOWrapper = sys.stdout,
         write_metadata: bool = False,
-        sep="","
+        sep=","
     ) -> None:
         
         r"""Writes a `GffFile` to a delimited file.

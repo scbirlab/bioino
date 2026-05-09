@@ -7,6 +7,8 @@ from dataclasses import dataclass, field, fields, replace
 from io import TextIOWrapper
 import sys
 
+from .column import GffColumns
+
 _GFF_COLNAMES: Tuple[str] = (
     "seqid", 
     "source", 

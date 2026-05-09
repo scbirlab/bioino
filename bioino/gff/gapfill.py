@@ -1,12 +1,14 @@
 """Utilities for making lookup tables from GFF files."""
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from .intervals import ChromosomeLookup, FeatureInterval
 
 if TYPE_CHECKING:
-    from .line import GFFLine
+    from .line import GffLine
 else:
-    GFFLine = Any
+    GffLine = Any
+
+from . import DOWNSTREAM_PREFIX, NAME_ATTRIBUTE, UPSTREAM_PREFIX
 
 
 def _gapfill_intervals(
