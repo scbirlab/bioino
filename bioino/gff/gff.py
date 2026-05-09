@@ -3,319 +3,33 @@
 Makes an attempt to conform to GFF3 but makes no guarantees.
 
 """
-
-from typing import Dict, Iterable, Mapping, Optional, Tuple, Union
+from typing import Dict, Iterable, Optional, Tuple, Union
 
 from collections import defaultdict
 import csv
-from dataclasses import asdict, dataclass, field, fields, replace
+from dataclasses import dataclass, field, fields, replace
 from io import TextIOWrapper
 from itertools import chain
 import sys
 
 from carabiner import print_err
-from carabiner.cast import cast
 from tqdm.auto import tqdm
 
-_GFF_COLNAMES = (
-    "seqid", 
-    "source", 
-    "feature", 
-    "start", 
-    "end", 
-    "score", 
-    "strand", 
-    "phase", 
-    "attribute",
-)
-_GFF_FEATURE_BLOCKLIST = (
+from .column import GffColumns, GffMetadata, GffMetadatum 
+from .gapfill import _gapfill_intervals
+from .intervals import ChromosomeLookup, FeatureInterval
+from .line import GffLine
+from .utils import _cast_to_file_handle
+
+_GFF_FEATURE_BLOCKLIST: Tuple[str] = (
     "region", 
     "repeat_region",
 )
 
+DOWNSTREAM_PREFIX: str = "_down-"
+UPSTREAM_PREFIX: str = "_up-"
+NAME_ATTRIBUTE: str = "Name"
 
-def _cast_to_file_handle(file: Union[str, TextIOWrapper]) -> TextIOWrapper:
-    if isinstance(file, TextIOWrapper):
-        return file
-    else:
-        return cast(file, to=TextIOWrapper)
-
-
-@dataclass
-class GffMetadatum:
-    """GFF-formatted metadata line.
-
-    Attributes
-    ----------
-    name : str
-        Name of metadatum.
-    flag : str, optional
-        "constrained" or "free", depending on whether it conforms to GFF. Default: "free".
-    values : tuple, optional
-        Tuple of values corresponding to `name`. Default: zero-length tuple.
-        
-    Methods
-    -------
-    __str__()
-        Show the GFF-formatted metadata.
-    write()
-        Write GFF-formatted line to file.
-        
-
-    Examples
-    --------
-    >>> print(GffMetadatum("Meta_name", "free", ("meta_value1", "meta_value2")))  # doctest: +NORMALIZE_WHITESPACE
-    #Meta_name  meta_value1     meta_value2
-    >>> print(GffMetadatum("Meta_name", "constrained", ("meta_value1", "meta_value2")))  # doctest: +NORMALIZE_WHITESPACE
-    ##Meta_name meta_value1     meta_value2
-
-    """
-    name: str
-    flag: str = field(default="constrained")
-    values: Tuple = field(default_factory=tuple)
-
-    def __post_init__(self):
-        if self.flag not in ["free", "constrained"]:
-            raise ValueError("GffMetadatum.flag must be one of ['free', 'constrained']].")
-        
-    def __str__(self) -> str:
-        """Show the GFF-formatted metadata."""
-        prefix = "##" if self.flag == "constrained" else "#"
-        suffix = "\t".join(map(str, self.values))
-        return f"{prefix}{self.name}\t{suffix}"
-    
-    def write(
-        self, 
-        file: TextIOWrapper = sys.stdout
-    ) -> None:
-        """Write GFF-formatted line to file."""
-        return print(str(self), file=file)
-        
-
-@dataclass
-class GffMetadata:
-    """GFF-formatted metadata.
-
-    Attributes
-    ----------
-    metadata : Tuple[GffMetadatum]
-        Tuple of metadata lines.
-
-    Methods
-    -------
-    __str__()
-        Show the GFF-formatted metadata.
-    write()
-        Write GFF-formatted line to file.
-
-    Examples
-    --------
-    >>> metadata = [("meta1", "constrained", ("item1", )), 
-    ...             ("meta2", "free", ("item2", "comment"))]
-    >>> metadata = GffMetadata(metadata)
-    >>> print(metadata)  # doctest: +NORMALIZE_WHITESPACE
-    ##meta1 item1
-    #meta2 item2    comment
-
-    """
-    data: Iterable[Union[GffMetadatum, Iterable]]
-
-    def __post_init__(self):
-        new_metadata = []
-        for item in self.data:
-            if isinstance(item, GffMetadatum):
-                new_metadatum = item
-            elif isinstance(item, Iterable) and not isinstance(item, str):
-                new_metadatum = GffMetadatum(*item)
-            else:
-                raise ValueError(f"{item} of type {type(item)} cannot be converted to GffMetadatum.")
-            new_metadata.append(new_metadatum)
-        self.data = tuple(new_metadata)
-    
-    def __str__(self) -> str:
-        """Show the GFF-formatted metadata."""
-        return "\n".join(map(str, self.data))
-
-    def write(
-        self, 
-        file: Optional[TextIOWrapper] = None
-    ) -> None:
-        """Write GFF-formatted line to file."""
-        return print(str(self), file=file)
-
-
-@dataclass
-class GffColumns:
-    """GFF-formatted columns.
-
-    Attributes
-    ----------
-    seqid : str
-        Name of chromosome.
-    source : str
-        Name of database or computer software source of annotation.
-    feature : str
-        Feature type, for example exon, gene, etc.
-    start : str
-        Start coordinate.
-    end : int
-        End coordinate.
-    score : str, optional
-        Score for feature. Default: ".".
-    strand : str, optional
-        Strandedness of feature. Either "+" or "-". Default: "+".
-    phase : str or int, optional
-        Location of first codon in feature relative to start. Default: ".".
-        
-    Methods
-    -------
-    __str__()
-        Show the GFF-formatted columns.
-
-    Examples
-    --------
-    >>> columns = "NC_000913.3   GenBank exon    1   100 .   +   .".split()
-    >>> print(GffColumns(*columns))  # doctest: +NORMALIZE_WHITESPACE
-    NC_000913.3 GenBank exon    1       100     .       +       .
-
-    """
-    seqid: str
-    source: str
-    feature: str
-    start: Union[str, int]
-    end: Union[str, int]
-    score: Optional[Union[str, int]] = field(default=".")
-    strand: Optional[str] = field(default="+")
-    phase: Optional[Union[str, int]] = field(default=".")
-
-    def __post_init__(self):
-        self.start = int(self.start)
-        self.end = int(self.end)
-
-    def __str__(self) -> str:
-        """Show the GFF-formatted columns."""
-        return "\t".join(map(str, self.as_dict().values()))
-    
-    def as_dict(self) -> dict:
-        return asdict(self)
-
-
-@dataclass
-class GffLine:
-    """Named tuple which gives a GFF-formatted line when printed.
-
-    Attributes
-    ----------
-    metadata : tuple
-        Tuple of GffMetadata from the original file.
-    columns : GffColumns
-        Representation of columns 1-8.
-    attributes : dict
-        Dictionary mapping attribute keys to values.
-
-    Methods
-    -------
-    copy()
-        Make a copy.
-    __str__()
-        Show the GFF-formatted line.
-
-    Examples
-    --------
-    >>> metadata = [("meta1", "constrained", {"item1": []}), 
-    ...             ("meta2", "free", {"item2": ["comment"]})]
-    >>> columns = ["test_seq", "test_source", "gene", 1, 10]
-    >>> gff_line = GffLine(columns, 
-    ...                    attributes={"ID": "test01", "attr1": "+"})  
-    >>> print(gff_line)  # doctest: +NORMALIZE_WHITESPACE
-    test_seq        test_source     gene    1       10      .       +       .       ID=test01;attr1=+
-
-    """
-
-    columns : Union[GffColumns, Iterable]
-    attributes : Optional[dict] = field(default_factory=dict)
-
-    @staticmethod
-    def _get_gff_attributes(x: str) -> Dict[str, str]:
-        splits_on_equal_sign = [item.split(";") for item in x.split("=")]
-        attributes = (item[-1] for item in splits_on_equal_sign)
-        values = (item[0] for item in splits_on_equal_sign[1:])
-        return dict(zip(attributes, values))
-    
-    def __post_init__(self):
-        if isinstance(self.columns, Iterable):
-            self.columns = GffColumns(*self.columns)
-        if isinstance(self.attributes, str):
-            self.attributes = self._get_gff_attributes(self.attributes)
-    
-    def __str__(self) -> str:
-        """Show the GFF-formatted line."""
-        _attributes = ";".join(f"{key}={val}" for key, val in self.attributes.items())
-        return str(self.columns) + "\t" + _attributes
-    
-    def as_dict(self) -> dict:
-        """Convert to dictionary."""
-        d = self.columns.as_dict()
-        d.update(self.attributes)
-        return d
-
-    def copy(self):
-        """Make a copy."""
-        return replace(self)
-    
-    def write(
-        self,
-        file: Optional[TextIOWrapper] = None
-    ) -> None:
-        """Write GFF-formatted line to file."""
-        return print(str(self), file=file)
-    
-
-    @classmethod
-    def from_dict(
-        cls,
-        d: Mapping
-    ):
-        """Converts a dictionary object to a GFFLine.
-
-        The input dictionary must at least have keys corresponding to the GFF
-        columns 1-8 and optionally additionl keys to put into the attributes
-        column.
-        
-        Parameters
-        ----------
-        d : dict
-            Dictionary to convert.
-
-        Returns
-        -------
-        GffLine
-            Object representing a GFF line.
-
-        Examples
-        --------
-        >>> d = dict(seqid="TEST", source="test", 
-        ...          feature="gene", start=1, 
-        ...          end=100, score=".", 
-        ...          strand="+", phase="+")
-        >>> print(GffLine.from_dict(d)) # doctest: +NORMALIZE_WHITESPACE
-        TEST        test    gene    1       100     .       +       +
-        >>> d.update(dict(ID="test001", comment="This is a test"))
-        >>> GffLine.from_dict(d).write() # doctest: +NORMALIZE_WHITESPACE
-        TEST    test    gene    1       100     .       +       +       ID=test001;comment=This is a test
-
-        """
-        _fields = _GFF_COLNAMES #[f.name for f in fields(cls)]
-        columns = GffColumns(**{
-            key: value for key, value in d.items() 
-            if key in _fields
-        })
-        attributes = {
-            key: d[key] for key in sorted(d) 
-            if key not in _fields
-        }
-        return cls(columns, attributes)
-    
 
 @dataclass
 class GffFile:
@@ -362,7 +76,7 @@ class GffFile:
     lines: Iterable[GffLine]
     metadata: Optional[Union[GffMetadata, Iterable[Union[Iterable, GffMetadatum]]]] = field(default_factory=list)
     lookup: Optional[bool] = field(default=False)
-    _lookup: Dict[int, Tuple[GffLine]] = field(init=False, default_factory=dict)
+    _lookup: Dict[str, ChromosomeLookup] = field(init=False, default_factory=dict)
 
     def __post_init__(self):
         if isinstance(self.metadata, Iterable):
@@ -370,7 +84,6 @@ class GffFile:
         if self.lookup:
             self.lines = tuple(self.lines)
             self._lookup = self._lookup_table()
-
 
     @staticmethod
     def _gapfill_table(
@@ -412,9 +125,9 @@ class GffFile:
             post_mid_prefix = "_down-"
 
         attr0 = intergenic0.attributes.copy() 
-        attr0.update(dict(locus_tag=pre_mid_prefix + attr0["Name"]))
+        attr0.update(dict(locus_tag=pre_mid_prefix + attr0[NAME_ATTRIBUTE]))
         attr1 = intergenic1.attributes.copy() 
-        attr1.update(dict(locus_tag=post_mid_prefix + attr1["Name"]))
+        attr1.update(dict(locus_tag=post_mid_prefix + attr1[NAME_ATTRIBUTE]))
         # print(attr1)
 
         # fill in the gap
@@ -440,92 +153,104 @@ class GffFile:
 
         return lookup_table
 
-
-    def _lookup_table(self) -> Dict[int, GffLine]:
-
-        """Generate a lookup table for parent features in GFF.
+    def _lookup_table(self) -> Dict[str, ChromosomeLookup]:
+        """Build per-chromosome interval lookup.
 
         Results in a dictionary allowing lookup by chromosome location 
-        to return feature annotations. Regions without annotation
-        are automatically filled with references to upstream or 
-        downstream features.
-
-        Notes
-        -----
-        - Currently only works for single-chromosome files.
-        - Only references parent features. Child features not yet indexed.
-        - Will not work for GFFs with a single parent feature.
-        - Ignores the following feature types: {}
+            to return feature annotations. Regions without annotation
+            are automatically filled with references to upstream or 
+            downstream features.
 
         Returns
-        -------
+        =======
         dict
             Dictionary mapping chromosome location to feature annotation.
+            Intergenic regions are covered by half-gap
+            intervals. Offsets and locus_tags are computed on demand at access.
 
-        """.format(", ".join(_GFF_FEATURE_BLOCKLIST))
+        Notes
+        =====
+        - Now handles multi-chromosome GFFs.
+        - Only references parent features. Child features not yet indexed.
+        - Stores references to original GffLine objects; no per-position copies.
+        - Ignores: {}
+        """.format(', '.join(_GFF_FEATURE_BLOCKLIST))
 
         print_err("Building annotation lookup table.")
-
-        lookup_table = defaultdict(list)
-
-        last_feature = None 
-
+        tables: Dict[str, ChromosomeLookup] = {}
+        last_feature: Dict[str, GffLine] = {}
         for gff_line in tqdm(self.lines):
+            if any([
+                gff_line.columns.feature in _GFF_FEATURE_BLOCKLIST,
+                NAME_ATTRIBUTE not in gff_line.attributes,
+                "Parent" in gff_line.attributes,
+            ])
+                continue
 
-            if (gff_line.columns.feature not in _GFF_FEATURE_BLOCKLIST and 
-                "Name" in gff_line.attributes and
-                "Parent" not in gff_line.attributes):
-                    
-                gap_table = self._gapfill_table(gff_line, 
-                                                last_feature)
-                
-                lookup_table.update(gap_table)
+            seqid = gff_line.columns.seqid
+            if seqid not in tables:
+                tables[seqid] = ChromosomeLookup()
+            table = tables[seqid]
+            prev = last_feature.get(seqid)
 
-                offset_start = (gff_line.columns.start 
-                                if gff_line.columns.strand == "+" 
-                                else gff_line.columns.end)
+            for start, end, interval in _gapfill_intervals(gff_line, prev):
+                table.add(start, end, interval)
 
-                for i in range(gff_line.columns.start, 
-                               gff_line.columns.end + 1):
+            strand = gff_line.columns.strand
+            origin = gff_line.columns.start if strand == '+' else gff_line.columns.end
+            sign = 1. if strand == "+" else -1.
+            locus_tag = gff_line.attributes.get(
+                "locus_tag",
+                gff_line.attributes.get(NAME_ATTRIBUTE, ''),
+            )
+            table.add(
+                gff_line.columns.start,
+                gff_line.columns.end,
+                FeatureInterval(gff_line, locus_tag, origin, sign),
+            )
+            last_feature[seqid] = gff_line
 
-                    offset =  abs(i - offset_start)
-                    this_gff_line = gff_line.copy()
-                    this_gff_line.attributes["offset"] = offset
+        # Trailing 1000 bp past the last annotated feature on each chromosome
+        for seqid, prev in last_feature.items():
+            strand = prev.columns.strand
+            if strand == '+':
+                origin, sign, prefix = prev.columns.start, 1., DOWNSTREAM_PREFIX
+            else:
+                origin, sign, prefix = prev.columns.end, -1., UPSTREAM_PREFIX
+            tag = prefix + prev.attributes.get('Name', '')
+            tables[seqid].add(
+                prev.columns.end + 1,
+                prev.columns.end + 1000,
+                FeatureInterval(prev, tag, origin, sign),
+            )
 
-                    lookup_table[i].append(this_gff_line)
+        return tables
 
-                last_feature = gff_line.copy()
+    def lookup_at(
+        self, 
+        seqid: str, 
+        pos: int
+    ) -> Tuple[GffLine, ...]:
+        """Look up annotations at a chromosomal position.
 
-        if last_feature.columns.strand == "+":
-            last_offset_start = last_feature.columns.start
-            last_sign = 1.
-            last_prefix = "_down-"
-        else:
-            last_offset_start = last_feature.columns.end
-            last_sign = -1.
-            last_prefix = '_up-'
+        Parameters
+        ==========
+        seqid : str
+            Chromosome identifier (i.e. GFF column 1).
+        pos : int
+            1-based chromosomal coordinate.
 
-        attr = last_feature.attributes.copy()
-        attr.update(dict(locus_tag=last_prefix + attr['Name']))
-
-        for i in range(last_feature.columns.end, 
-                       last_feature.columns.end + 1000):
-
-            offset = (i - last_offset_start) * last_sign
-            new_attributes = attr.copy() 
-            new_attributes.update(dict(offset=int(offset)))
-            last_feature = replace(last_feature, attributes=new_attributes)
-
-            lookup_table[i].append(last_feature)
-
-        missing_entries = [i for i in range(1, max(lookup_table) + 1) if len(lookup_table[i]) == 0]
-
-        if len(missing_entries) > 0:
-
-            raise AttributeError(f"Chromosome locations {', '.join(missing_entries)} are missing from lookup table.")
-
-        return {key: tuple(value) for key, value in lookup_table.items()}
-
+        Returns
+        =======
+        tuple of GffLine
+            All features covering pos with offset and locus_tag computed.
+            Empty tuple if pos falls outside all annotated intervals.
+        
+        """
+        chrom = self._lookup.get(seqid)
+        if chrom is None:
+            return None
+        return chrom.at(pos)
 
     def as_dict(self) -> Iterable[dict]:
         r"""Converts a `GffFile` to a stream of dictionaries.
@@ -552,7 +277,6 @@ class GffFile:
         """
         return (line.as_dict() for line in self.lines)
 
-        
     def to_csv(
         self,
         file: TextIOWrapper = sys.stdout,
@@ -643,7 +367,6 @@ class GffFile:
         for gff_line in self.as_dict():
             writer.writerow(gff_line)
         return None
-
 
     @staticmethod
     def _from_file(
