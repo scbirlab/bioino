@@ -37,7 +37,7 @@ dependencies = [
 
 [project.optional-dependencies]
 all = []
-dev = ["pytest>=7.4", "pytest-cov", "flake8", "gradio>=5"]
+dev = ["pytest>=7.4", "pytest-cov", "flake8"]
 
 [project.urls]
 "Homepage" = "https://github.com/scbirlab/bioino"
@@ -53,4 +53,4 @@ requires = ["setuptools>=43.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [test]
-deps = ["pytest>=7.4", "pytest-cov", "bartab[dev]"] 
+deps = ["pytest>=7.4", "pytest-cov", "bioino[dev]"] 
