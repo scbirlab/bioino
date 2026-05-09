@@ -42,11 +42,8 @@ def _table2fasta(args: Namespace) -> None:
         format=args.format,
     )
     
-    fasta_collection = FastaCollection.from_pandas(
-        table, 
-        sequence=args.sequence,
-        names=args.name, 
-        descriptions=args.description,
+    fasta_collection = FastaCollection.from_file(
+        args.input,
     )
     _allow_broken_pipe(fasta_collection.write)(file=args.output)
     return None

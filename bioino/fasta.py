@@ -128,8 +128,10 @@ class FastaCollection:
             yield FastaSequence(seq_name, seq_desc, seq)
 
     @classmethod
-    def from_file(cls, 
-                  file: Union[str, TextIOWrapper]):
+    def from_file(
+        cls, 
+        file: Union[str, TextIOWrapper]
+    ):
 
         """Read sequences from a FASTA file.
 
@@ -167,12 +169,14 @@ class FastaCollection:
         return cls(seq for seq in cls._from_file(file=file))
     
     @staticmethod
-    def _from_pandas(data: DataFrame, 
-                     sequence: str,
-                     names: Union[str, Iterable[str]], 
-                     descriptions: Optional[Union[str, Iterable[str]]] = None,
-                     name_sep: str = '_',
-                     desc_sep: str = ';') -> Iterable[FastaSequence]:
+    def _from_pandas(
+        data: DataFrame, 
+        sequence: str,
+        names: Union[str, Iterable[str]], 
+        descriptions: Optional[Union[str, Iterable[str]]] = None,
+        name_sep: str = '_',
+        desc_sep: str = ';'
+    ) -> Iterable[FastaSequence]:
         
         descriptions = descriptions or []
         names = cast(names, to=list)
@@ -202,13 +206,15 @@ class FastaCollection:
             yield FastaSequence(name, decription, seq)
 
     @classmethod
-    def from_pandas(cls, 
-                    data: DataFrame, 
-                    sequence: str,
-                    names: Union[str, Iterable[str]], 
-                    descriptions: Optional[Union[str, Iterable[str]]] = None,
-                    name_sep: str = '_',
-                    desc_sep: str = ';'):
+    def from_pandas(
+        cls, 
+        data: DataFrame, 
+        sequence: str,
+        names: Union[str, Iterable[str]], 
+        descriptions: Optional[Union[str, Iterable[str]]] = None,
+        name_sep: str = '_',
+        desc_sep: str = ';'
+    ):
 
         """Create a `FastaCollection from a Pandas DataFrame.
 
@@ -264,17 +270,20 @@ class FastaCollection:
 
         """
 
-        sequences = cls._from_pandas(data=data, 
-                                     sequence=sequence,
-                                     names=names, 
-                                     descriptions=descriptions,
-                                     name_sep=name_sep,
-                                     desc_sep=desc_sep)
-
+        sequences = cls._from_pandas(
+            data=data, 
+            sequence=sequence,
+            names=names, 
+            descriptions=descriptions,
+            name_sep=name_sep,
+            desc_sep=desc_sep,
+        )
         return cls(seq for seq in sequences)
 
-    def write(self,
-              file: Optional[TextIOWrapper] = None):
+    def write(
+        self,
+        file: Optional[TextIOWrapper] = None
+    ):
         
         """Stream sequences to a FASTA file.
 
@@ -305,7 +314,5 @@ class FastaCollection:
         """
         
         for fasta_seq in self.sequences:
-
             fasta_seq.write(file=file)
-
         return None
