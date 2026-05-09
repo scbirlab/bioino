@@ -114,7 +114,10 @@ class GffMetadata:
     
     def __str__(self) -> str:
         """Show the GFF-formatted metadata."""
-        return "\n".join(map(str, self.data))
+        if len(self.data) > 0:
+            return "\n".join(map(str, self.data))
+        else:
+            return ""
 
     def write(
         self, 
